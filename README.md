@@ -1,0 +1,25 @@
+# market-data
+
+To run:
+
+```bsh
+python -i startup.py
+```
+
+or
+
+```bsh
+ipython startup.py
+```
+
+To do list:
+- [ ] make a runList() class which keeps track of all the required analyses and their required analyses, etc., ensuring no repetition.
+- [ ] conform strategyAnalysis() to the required analyses/runList() setup.
+- [ ] if equity ratio is negative the CAGR is complex and math.pow() will return an exception. How should I treat negative equity? Adjust to zero and accumulate debts?
+- [ ] monthly returns histogram
+- [ ] add input from correlated indices to GradConf (possible for other strategies?)
+- [ ] modify GradConf to use non-Gaussian errors, e.g. Breit-Wigner gamma found with RooFit.
+- [ ] implement multi-index strategies with position sizing.
+- [ ] implement Turtles' System 1
+- [ ] strategy parameter optimisation class - require input parameters as a dictionary?
+
