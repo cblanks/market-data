@@ -1,0 +1,6 @@
+(dp1
+S'FTSE'
+p2
+S'FTSE 100'
+p3
+s.
