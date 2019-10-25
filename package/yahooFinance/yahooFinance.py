@@ -3,7 +3,7 @@
 
 # docstrings ----------------------------------------------------
 """
-A finance data collection, analysis and systematic trading package.
+A Yahoo! Finance data collection, analysis and systematic trading package.
 
 Historical finance data is retrieved from Yahoo! Finance in csv format.
 A dictionary of indices is maintained for easy batch retrieval.
@@ -20,7 +20,7 @@ import csv
 import datetime
 import math
 import os
-#import ROOT
+import ROOT
 import sys
 import urllib 
 
@@ -30,9 +30,9 @@ author = "Chris Blanks"
 contact = "chris.blanks@gmail.com"
 version = 1.0
 
-project_dir = os.path.expanduser("~/Dropbox/Documents/Study/MarketDataProject")
+project_dir = os.path.expanduser("~/Documents/Study/MarketDataProject")
 days_of_the_week = [ "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday" ]
-a_long_time_ago = datetime.date(1897, 8, 7) # the date J.J. Thomson published his discovery of the electron.
+a_long_time_ago = datetime.date(1897, 1, 1) # the year J.J. Thomson discovered the electron. 
 nominal_days_per_year = 250 
 risk_free_rate = 0.05
 monthly_risk_free_rate = math.pow( 1.0 + risk_free_rate, 1.0/12.0 ) - 1.0
@@ -43,16 +43,63 @@ def volatility(variance, lookback_days):
     """
     A function to convert a daily standard deviation to volatility.
     """
-    return math.sqrt(variance * nominal_days_per_year / lookback_days)
+    return math.sqrt( variance*nominal_days_per_year/lookback_days )
 
 
 # classes -------------------------------------------------------
-class YahooIndexDictionary():
+class financeDatasetGroup(dict):
     """
-    A dictionary class for Yahoo!'s listed financial indices.
+    A dictionary-derived object to group stored finance data from Yahoo! Finance.
     """
     # attributes
-    __backup__ = "%s/.YahooIndexDictionary.pkl" % project_dir
+
+    # protected
+    def __init__(self):
+        """
+        Initialise the dataset based on a supplied yahoo index dictionary.
+        """
+        self.indices = indexDictionary()
+        for i in self.indices.keys():
+            self[i] = financeDataset(i)
+            
+    # public
+    def getLatest(self):
+        """
+        A method to update the dataset based on the list of Yahoo! indices. Ensures 
+        that all existing data are up to date, that non-existing data is downloaded 
+        and that previously saved data for non-listed indices is removed.
+        """
+        # check for redundant datasets to delete
+        for i in self.keys():
+            if not self.indices.has_key(i):
+                self[i].removeCsv()
+                del self[i]
+
+        # update existing datasets
+        for key in self.keys():
+            self[key].getLatest(auto=True)
+        
+        # check for new indices to download
+        for i in self.indices.keys():
+            if not self.has_key(i): 
+                self[i] = financeDataset(i)
+                
+    def summarise(self):
+        """
+        A method to print a summary of the loaded datasets.
+        """
+        for key in sorted(self.indices.keys()):
+            data = self[key]
+            period = data.__getStoredPeriod__()
+            print data.name, "\t", period[0], "-->", period[1], "\t", self.indices[data.name]
+
+
+class indexDictionary(dict):
+    """
+    A dictionary class for Yahoo's listed financial indices.
+    """
+    # attributes
+    __backup__ = "%s/.yahooIndexDictionary.pkl" % project_dir
     
     default_indices = { "FTSE"  : "London FTSE 100 index"       ,
                         "FTMC"  : "London FTSE 250 index"       ,
@@ -75,84 +122,28 @@ class YahooIndexDictionary():
         if not os.path.exists(project_dir): 
             os.makedirs(project_dir)
         
-        self.indices = {}
-        
         # reset index dictionary if no backup file found
         if not os.path.isfile(self.__backup__):
             self.reset()
         else:
-            with open(self.__backup__, 'r') as f:
-                __saved_indices__ = cPickle.load(f)
-                self.indices = dict(__saved_indices__)
+            f = open(self.__backup__)
+            self.update(cPickle.load(f))
+            f.close()
 
     def __del__(self):
         """
         The destruction method.
         """
-        with open(self.__backup__, "w") as f:
-            cPickle.dump(self.indices, f)
+        f = open(self.__backup__, "w")
+        cPickle.dump(self, f)
+        f.close()
 
     # public
     def reset(self):
         """
-        Reset index dictionary to default list.
+        Reset Yahoo! index dictionary to default list.
         """
-        self.indices = dict(self.default_indices)
-
-
-class financeDatasetGroup(YahooIndexDictionary):
-    """
-    A dictionary-derived object to group stored finance data from Yahoo! Finance.
-    """
-    # attributes
-
-    # protected
-    def __init__(self):
-        """
-        Initialise the dataset based on a supplied Yahoo! index dictionary.
-        """
-        YahooIndexDictionary.__init__(self)
-        
-        self.datasets = {}
-        for k in self.indices.keys():
-            self.datasets[k] = financeDataset(k)
-            
-            if self.datasets[k].allOK() is False:
-                print 'WARNING: No data received for %s.' % self.datasets[k].name
-                #self.datasets[k].removeCsv()
-                del self.datasets[k]
-                del self.indices[k]
-            
-    # public
-    def update(self):
-        """
-        A method to update the dataset based on the list of Yahoo! indices. Ensures 
-        that all existing data are up to date, that non-existing data is downloaded 
-        and that previously saved data for non-listed indices is removed.
-        """
-        # check for redundant datasets to delete
-        for k in self.datasets.keys():
-            if not self.indices.has_key(k):
-                self.datasets[k].removeCsv()
-                del self.datasets[k]
-
-        # update existing datasets
-        for k in self.datasets.keys():
-            self.datasets[k].getLatest(auto=True)
-        
-        # check for new indices to download
-        for k in self.indices.keys():
-            if not self.datasets.has_key(k): 
-                self.datasets[k] = financeDataset(k)
-                
-    def summarise(self):
-        """
-        A method to print a summary of the loaded datasets.
-        """
-        for k in sorted(self.indices.keys()):
-            data = self.datasets[k]
-            period = data.__getStoredPeriod__()
-            print data.name, "\t", period[0], "-->", period[1], "\t", k, self.indices[data.name]
+        self.update(self.default_indices)
 
 
 class csvDataset():
@@ -224,13 +215,15 @@ class csvDataset():
             entries = []
             
             for row in row_range.__reversed__():
+                # reverse time order -> oldest first
+                #row = n_rows - row
+                #row = row_range[-1] - row
                 
-                # format data type from string
+                # format data type
                 original = data[row][col]
-                
                 if original=="": # ignore empty cells
                     formatted = original
-                    
+
                 elif self.headers[col]=="Date":
                     formatted = datetime.date(int(original[0:4]), 
                                               int(original[5:7]), 
@@ -248,12 +241,6 @@ class csvDataset():
             
         return formatted_data
     
-    def __getTotalTradingDays__(self):
-        """
-        Method to return the total number of trading days recorded.
-        """
-        return len(self.__readCsv__())
-
     def __setCsvData__(self, data):
         """
         Method to write formatted analysis results - stored as a python 
@@ -265,6 +252,9 @@ class csvDataset():
         row_range = xrange(0, len(data[self.headers[0]]))
 
         for row in row_range.__reversed__():
+            # reverse time order -> newest first
+            #row = (n_rows - 1) - row
+            #row = (row_range[-1] - 1) - row
             
             # arrange data for writing
             this_row = []
@@ -292,10 +282,6 @@ class csvDataset():
                 
             elif sys.platform.startswith("darwin"):
                 os.system("open %s" % self.csv_path)
-
-            elif sys.platform.startswith("win"):
-                os.system("start %s" % self.csv_path)
-
             else:
                 print "No command specified for this operating system."
 
@@ -315,7 +301,7 @@ class financeDataset(csvDataset):
     from Yahoo Finance.
     """
     # attributes
-    data_dir = "%s/data/prices" % project_dir
+    data_dir = "%s/downloadedData" % project_dir
     
     # protected
     def __init__(self, name="FTSE"):
@@ -350,7 +336,7 @@ http://ichart.finance.yahoo.com/table.csv?s=%sE%s&d=%i&e=%i&f=%i&g=d&a=%i&b=%i&c
        period[0].month, period[0].day, period[0].year) # oldest data
         
         print "Downloading data for %s ..." % self.name
-        urllib.urlretrieve(url_query, self.csv_path)
+        urllib.urlretrieve(url_query, self.csv_path)  
         print "complete."
         
     def __ensureCsvExists__(self):
@@ -358,27 +344,20 @@ http://ichart.finance.yahoo.com/table.csv?s=%sE%s&d=%i&e=%i&f=%i&g=d&a=%i&b=%i&c
         """
         if not os.path.isfile(self.csv_path):
             self.__download__()
-            
+
     def __getStoredPeriod__(self):
         """
         A method to determine the newest and the oldest data stored.
         """
-        data = self.__getCsvData__()
-        return [data['Date'][0], data['Date'][-1]]
+        data = self.__readCsv__()
 
-    
+        old = data[-1][0]
+        new = data[1][0]
+        
+        return [datetime.date(int(old[0:4]), int(old[5:7]), int(old[8:10])),
+                datetime.date(int(new[0:4]), int(new[5:7]), int(new[8:10]))]
+
     # public
-    def allOK(self):
-        self.__ensureCsvExists__()
-        
-        with open(self.csv_path) as f:
-            top_line = f.readline()
-            
-            if top_line.find('html')>-1:
-                return False
-            
-        return True
-        
     def getLatest(self, auto=False):
         """
         A method to update the stored data if new data is available.
@@ -420,7 +399,7 @@ class timeSeriesAnalysis(csvDataset):
     A base class for time series analysis of Yahoo! Finance datasets.
     """
     # attributes
-    analysis_dir = "%s/data/analysis" % project_dir
+    analysis_dir = "%s/analysis" % project_dir
     analysis_type = "timeSeries"
 
     # protected
@@ -432,11 +411,6 @@ class timeSeriesAnalysis(csvDataset):
             os.makedirs(self.analysis_dir)
         
         self.input_data = input_data
-        
-        if not os.path.exists(self.analysis_dir):
-            os.makedirs(self.analysis_dir)
-        
-        self.input_data = input_data
         self.lookback_days = lookback_days
         for i in lookback_days:
             if i<1: 
@@ -444,7 +418,7 @@ class timeSeriesAnalysis(csvDataset):
                 break
 
         self.name = self.__setName__()
-
+        
         csvDataset.__init__(self, self.__csvPath__())
         
         self.headers = self.__setHeaders__()
@@ -614,58 +588,6 @@ class timeSeriesAnalysis(csvDataset):
         self.__messages__("finished")
 
 
-class MM(timeSeriesAnalysis):
-    """
-    An object to calculate the N-Day Moving Median of the closing price.
-    """
-    # attributes
-    analysis_type = "MM"
-    
-    # protected
-    def __init__(self, input_data, analysis_period=[a_long_time_ago, datetime.date.today()], lookback_days=[10]):
-        """
-        The initialisation method.
-        """
-        timeSeriesAnalysis.__init__(self, input_data, analysis_period, lookback_days)
-        self.__lookback_values__ = []
-        
-    def __variable__(self, data, row, i):
-        """
-        Method to return the variable to be averaged.
-        """
-        return data[self.input_data.name]["Close"][row]
-
-    def __calculation__(self, data, i, row):
-        """
-        The method to calculate the N-Day moving median.
-        """
-        # First step
-        if row==self.__initialAnalysisPeriod__(i):
-            for r in xrange(0, row):
-                x = self.__variable__(data, r, i) 
-                self.__lookback_values__.append(x)
-                
-        # Update the moving look-back window
-        else:
-            x = self.__variable__(data, row-1, i) 
-            self.__lookback_values__.pop(0)
-            self.__lookback_values__.append(x)
-            
-        # Calculate median
-        # TBC some faster binary search to insert and pop values from sorted list
-        sorted_values = sorted(self.__lookback_values__)
-
-        if self.lookback_days[i]%2==0: # even
-            a = self.lookback_days[i]/2
-            return (sorted_values[a-1] + sorted_values[a]) / 2.0
-        
-        else:
-            a = (self.lookback_days[i]+1)/2
-            return sorted_values[a-1]
-
-    # public
-
-
 class MA(timeSeriesAnalysis):
     """
     An object to calculate the N-Day Moving Average of the closing price.
@@ -680,7 +602,7 @@ class MA(timeSeriesAnalysis):
         """
         timeSeriesAnalysis.__init__(self, input_data, analysis_period, lookback_days)
         self.__lookback_values__ = []
-        self.__sum__ = 0.0
+        self.__sum__ = -999.0
         
     def __variable__(self, data, row, i):
         """
@@ -707,7 +629,7 @@ class MA(timeSeriesAnalysis):
                 
         # Iterate the moving average
         else:
-            x = self.__variable__(data, row-1, i) 
+            x = self.__variable__(data, row-1) 
             self.__sum__ += x
             self.__sum__ -= self.__lookback_values__[0]
             self.__lookback_values__.pop(0)
@@ -818,31 +740,6 @@ class COV(VAR):
         res_y = data[self.input_data.name]["Close"][row] - ma
         res_x = row - maday
         return res_y*res_x
-
-    # public
-
-
-class MAE(MA):
-    """
-    An object to calculate the moving Mean Absolute Error of the daily closing price:
-    E|x - c|, where 'c' is a constant.
-    """
-    # attributes
-    analysis_type = "MAE"
-    
-    # protected
-    def __init__(self, c, input_data, analysis_period=[a_long_time_ago, datetime.date.today()], lookback_days=[10]):
-        """
-        The initialisation method.
-        """
-        self.c = c
-        MA.__init__(self, input_data, analysis_period, lookback_days)
-        
-    def __variable__(self, data, row, i):
-        """
-        Method to return the variable to be averaged: the Absolute Error.
-        """
-        return math.fabs(data[self.input_data.name]["Close"][row] - self.c)
 
     # public
 
@@ -1266,25 +1163,6 @@ class EWATR(exponentialWeighting, ATR):
         The initialisation method.
         """
         ATR.__init__(self, input_data, analysis_period, lookback_days)
-        exponentialWeighting.__init__(self, lookback_days)
-
-    # public
-
-
-class EWMAE(exponentialWeighting, MAE):
-    """
-    An object to calculate the Exponentially Weighted Average of the 
-    Mean Absolute Error of the daily closing price.
-    """
-    # attributes
-    analysis_type = "EWMAE"
-    
-    # protected
-    def __init__(self, c, input_data, analysis_period=[a_long_time_ago, datetime.date.today()], lookback_days=[10]):
-        """
-        The initialisation method.
-        """
-        MAE.__init__(self, c, input_data, analysis_period, lookback_days)
         exponentialWeighting.__init__(self, lookback_days)
 
     # public
@@ -1953,7 +1831,7 @@ class GradConf(tradingSystem):
         """
         A methof to return the critical t-value for a two-tail test.
         """
-        return 1.0#ROOT.TMath.StudentQuantile(self.__pOneTail__(self.confidence), self.lookback[0]-2)
+        return ROOT.TMath.StudentQuantile(self.__pOneTail__(self.confidence), self.lookback[0]-2)
 
     def __goLong__(self, data, row):
         """

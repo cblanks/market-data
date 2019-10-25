@@ -1,0 +1,12 @@
+Plan for a webapp
+
+for a given stock, plot:
+- candlestick
+- ratio close / market
+- volume
+
+then add trends, etc.
+
+look at support and resistance levels
+
+macd momentum oscillator
